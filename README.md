@@ -27,7 +27,7 @@ RECOMENDATIONS:
 * You can connect the three chips together without any problems (ex: D0-D8)
 
 GENERAL PINOUTS TO MAKE YOUR SOUND BOARDS ON ARDUINO CONNECTOR
-AND SOUND OUT IN YOUR COLOUR MAXIMITE
+AND SOUND OUT IN YOUR COLOUR MAXIMITE 1 (open it in a notepad)
 
 CMM     SN76489    PIN       AY-3-8910   PIN
                              (Or YM2149)
