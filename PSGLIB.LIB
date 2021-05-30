@@ -1,0 +1,235 @@
+Sub InitSound
+ Local t
+ If StartedPSG=0 Then Dim CHVol(3),Ton(3),XYP(16,2):StartedPSG=1
+ For TTMus = 0 To 14:SetPin 21+TTMus,8:Pin(21+TTMus)=1:Next TTMus
+ SetStereo(1,1):Silence:psg=1:PSGMus=0:PWMMus=0:SQLMus=0
+ SetStereo(1,1):StereoMusic(1,1):StereoSFX(1,1):SetAYClock(0)
+ For t=0 To 3:ton(t)=20:Next t
+End Sub
+Sub SetAY(Ay):AyEn=Ay:End Sub
+Sub SetStereo(LC,RC):Pin(D10)=1-RC:Pin(D11)=1-LC:End Sub
+Sub StereoMusic(LC,RC):StMusL=1-LC:StMusR=1-RC:End Sub
+Sub StereoSFX(LC,RC):StSFXL=1-LC:StSFXR=1-RC:End Sub
+Sub EnablePSG(psgx):psg=psgx:End Sub
+Sub SendByte(Num)
+ Pin(D10)=StSFXR:Pin(D11)=StSFXL:Pin(D8)=1:Port(D0,8)=Num:Pin(D8)=0:Pin(D8)=1
+End Sub
+Sub SetVolume(Chan,Vol)
+ If CHVol(Chan)=Vol Or psg=0 Then Exit Sub
+ SendByte(128+Chan*32+16+Vol)
+End Sub
+Sub SetTone(Chan,Ton)
+ If Ton<0 Or Ton>1023 Or Chan<0 Or Chan>3 Or psg=0 Then Exit Sub
+ BTon$=Bin$(Ton):STon$=String$(10-Len(BTon$),"0")+BTon$
+ SendByte(128+Chan*32+Val("&B"+Right$(STon$,4)))
+ SendByte(Val("&B00"+Left$(STon$,6)))
+End Sub
+Sub SetNoise(Ton)
+ Ton=Ton+3:If Ton<0 Or Ton>15 Or PSG=0 Then Exit Sub
+ SendByte(224+Ton):SendByte(Ton)
+End Sub
+Sub ChangeSpeed(xx)
+  SRate=44100
+  If xx=0 Then
+   Wait60=0:Wait50=0:SWait=0
+  Else
+   Wait60=(1000/(SRate/735))/xx:Wait50=(1000/(SRate/882))/xx
+   SWait=(1000/(SRate/1))/xx
+  EndIf:Speed=xx
+End Sub
+Sub Silence
+ SetStereo(1,1):StereoSFX(1,1):Pin(D8)=1
+ SendByte(&H9F):SendByte(&HBF):SendByte(&HDF):SendByte(&HFF)
+ Pin(D10)=1:Pin(D11)=1:Pin(D12)=0:Pin(D8)=1:Tone Stop
+End Sub
+Function SeekHeaderChar$(HMus,size)
+ Seek #4,HMus+1:SeekHeaderChar$=Input$(size,#4)
+End Function
+Function SeekHeaderInt(HMus,size)
+ Temp$ = "":For SMus=size To 1 Step -1
+  Seek #4,HMus+SMus:Temp$=Temp$+Hex$(Asc(Input$(1,#4)))
+ Next SMus:SeekHeaderInt=Val("&H"+Temp$)
+End Function
+Sub LoadVGM(Music$)
+ InitSound:Open Music$ For INPUT As #4
+ Speed=1:Clk=SeekHeaderInt(&H0C,4):EOFoffset=SeekHeaderInt(&H04,4)
+ TotalSamples=SeekHeaderInt(&H18,4):VGMoffset=SeekHeaderInt(&H34,4)
+ If VGMOffSet=0 Then VGMOffSet=&H40
+ LOffSet=SeekHeaderInt(&H1C,4):LSamples=SeekHeaderInt(&H20,4)
+ LBase=SeekHeaderInt(&H7E,1):LModifier=SeekHeaderInt(&H7F,1)
+ If LModifier<>0 Or Lbase<>0 Then NumLoops=LModifier-LBase Else NumLoops=-1
+ RestartVGM: IMus=VGMOffset:Rtimer=1
+End Sub
+Sub WaitRotines(H)
+ If H=&H61 Then
+  Temp=Peek(VAR Mus$,MP+2)*256+Peek(VAR Mus$,MP+1):MP=MP+2
+  PauseTime=PauseTime+SWait*Temp:Exit Sub
+ EndIf
+ If H=&H62 Then PauseTime=PauseTime+Wait60:Exit Sub
+ If H=&H63 Then PauseTime=PauseTime+Wait50:Exit Sub
+ If H=&H66 Then
+  If Loffset>0 Then
+   IMus=Loffset:MP=Buf+1:RestartVGM
+  Else
+   IMus=L+1:MP=Buf+1
+  EndIf:Exit Sub
+ EndIf
+ ElseIf H>=&H70 And H<=&H7F Then
+  Frames=(H-&H6F):PauseTime=PauseTime+SWait*Frames:Exit Sub
+ EndIf
+End Sub
+Sub IntVGM
+ If MP>Buf Then RestartVGM
+ Do While (Timer-StartTime<=PauseTime):Rtimer=1:Exit Sub:Loop
+ If Rtimer=1 Then StartTime=Timer:PauseTime=SWait:Rtimer=0
+ MP=MP+1:HM=Peek(VAR Mus$,MP)
+ If HM=&H50 And AYEn=0 Then
+  ThAgain=1
+  Do While ThAgain=1
+   ThAgain=0:MP=MP+1:SNEn=1:Pin(D10)=StMusR:Pin(D11)=StMusL
+   Port(D0,8)=Peek(VAR Mus$,MP):Pin(D8)=0:Pin(D8)=1
+   If Peek(VAR Mus$,MP+1)=&H50 Then
+    MP=MP+1:ThAgain=1:If MP>Buf Then ThAgain=0:Exit Sub
+   EndIf
+  Loop
+ ElseIf HM=&HA0 And AYEN=1 Then
+  ThAgain=1:Pin(D12)=1:Pin(D10)=1:Pin(D11)=1
+  Do While ThAgain=1
+   ThAgain=0
+   Port(D0,8)=Peek(VAR Mus$,MP+1):Pin(D8)=0
+   Port(D0,8)=Peek(VAR Mus$,MP+2):Pin(D8)=1
+   MP=MP+2:If Peek(VAR Mus$,MP+1)=&HA0 Then
+    MP=MP+1:ThAgain=1:If MP>Buf Then ThAgain=0:Exit Sub
+   EndIf
+  Loop
+ Else
+  WaitRotines(HM)
+ EndIf
+End Sub
+Sub RestartVGM
+  Dif=0:If IMus>LMus Then StopMusic: GoTo NoSound
+  If IMus+MP>=LMus And Loffset>0 Then IMus=Loffset
+  Option Error Continue
+  Seek #4,IMus:Dif=MP-Buf:Mus$=Input$(Buf+15,#4):MP=0
+  If IMus+Buf-Dif<LMus Then IMus=IMus+Buf-Dif Else IMus=IMus+(LMus-IMus)-Dif
+  NoSound:
+End Sub
+Sub PlayVGM
+ ChangeSpeed(Speed):IMus=VGMoffset-2
+ If IMus+MP>=LMus And Loffset>0 Then IMus=Loffset
+ Seek #4,IMus:LMus=Lof(#4):EMus=EOFoffset:Sample=0
+ PauseTime=0:StartTime=0:MP=0:Ymus=0:Yantmus=0:GFX=0:Dif=0:Buf=240
+ Mus$=Input$(Buf+15,#4):IMus=IMus+Buf-Dif
+ If PWMMus=0 Then SetTick 10,IntVGM,4 Else SetTick 10,IntPWM,4
+End Sub
+Sub SetIntMusic(tickMus)
+ If PWMMus=1 Then
+  SetTick tickMus,IntPWM,4
+ Else
+  If PSGMus=0 Then SetTick tickMus,IntVGM,4 Else SetTick tickMus,IntPSG,4
+ EndIf
+End Sub
+Sub StopMusic:SetIntMusic(0):Pause(100):Silence:End Sub
+Sub UnloadMusic:StopMusic:PSGMus=0:Close #4:BTon$="":STon$="":Mus$="":End Sub
+Sub SetAYClock(ClkDiv):Pin(D13)=ClkDiv:End Sub
+Sub LoadPSG(Music$)
+ Local TMus:Open Music$ For INPUT As #4:Silence
+ PauseTime=0:StartTime=0:PSGMus=1:RPSG=4:nosnd=1:ChangeSpeed(1)
+ Pin(D12)=0:Pin(D12)=1:SetAYClock(0)
+ For TMus=1 To 16:XYP(TMus,1)=16:XYP(TMus,2)=255:Next TMus
+End Sub
+Sub PlayPSG:Pin(D10)=1:Pin(D11)=1:SetTick 20,IntPSG,4:End Sub
+Sub IntPSG
+ Do While (Timer-StartTime<=PauseTime-2):Exit Sub:Loop
+ If nosnd=1 Then
+  If YmusA=&HFD Then RPSG=4:YmusA=0
+  Seek #4,RPSG:Mus$=Input$(255,#4):IPSG=0:xyPSG=0:nosnd=0
+ EndIf
+ Do While (xyPSG<210 Or IPSG<>0) And (YmusA<>&HFD) And Eof(#4)=0
+  Do While (Timer-StartTime<=PauseTime-2):Exit Sub:Loop
+  IPSG=IPSG+1:xyPSG=xyPSG+1
+  YmusA=Peek(VAR Mus$,xyPSG):YmusB=Peek(VAR Mus$,xyPSG+1)
+  If YmusA<16 Then XYP(IPSG,1)=YmusA:XYP(IPSG,2)=YmusB:xyPSG=xyPSG+1
+  If YmusA=&HFF Then
+   For TMus=1 To IPSG
+    Port(D0,9)=XYP(TMus,1):Port(D0,9)=XYP(TMus,2):Pin(D8)=1
+   Next TMus
+   For TMus=1 To 16:XYP(TMus,1)=16:XYP(TMus,2)=255:Next TMus
+   PauseTime=12-IPSG-Speed:StartTime=Timer:IPSG=0:Exit Sub
+  EndIf
+  If YmusA=&HFE Then
+   For TMus=1 To IPSG
+    Port(D0,9)=XYP(TMus,1):Port(D0,9)=XYP(TMus,2):Pin(D8)=1
+   Next TMus:PauseTime=(12-i)*YmusB*7.5:StartTime=Timer
+   For TMus=1 To 16:XYP(TMus,1)=16:XYP(TMus,2)=255:Next TMus
+   IPSG=0:Exit Sub
+  EndIf
+ Loop
+ RPSG=RPSG+xyPSG:nosnd=1:If Eof(#4)=1 Then RPSG=4
+End Sub
+Sub PSGLibAni
+ Local T,TT,TTT:Cls:Silence:Option error continue:Pause(100)
+ LoadVGM("B:\PSGLIB\MUSIC\PSGLIB.VGM"):PlayVGM
+ Changespeed(1.2):SetIntMusic(0.5):Pause(80)
+ For T=10 To 1 Step -1
+  A$="B:\PSGLIB\BMP\PSGLIB"+Str$(T)+".BMP":Pause(8):LoadBMP A$,68,85
+ Next T:Changespeed(1):t=0:Pause(100):tt=Timer:show=0
+ Do While t<tt+5000
+  t=Timer:If t>tt+700 And show=0 Then
+   show=1:LoadBMP "B:\PSGLIB\BMP\MXAVIER.BMP",27,135
+   LoadBMP "B:\PSGLIB\BMP\POWERED.BMP",67,60
+   For ttt=0 To 1:Print@(92,MM.VRes-14+ttt,1) "CDN 2019":Next ttt
+  EndIf
+  If t>tt+2750 And show=1 Then show=2:stopMusic
+  If KeyDown=32 Or KeyDown=27 Then
+   If T<tt+2750 Then stopMusic:UnloadMusic:Cls:Exit Sub
+  EndIf:Pause(1)
+ Loop:StopMusic:UnloadMusic:Silence
+End Sub
+Sub PlayRAW(RawFile$,Int,RWST)
+ StopRAW=0:RawST=RWST:Open RawFile$ For Input As #3
+ Seek #3,1:Ra$=Input$(255,#3):RAWI=1
+ If int=0 Then
+  Do While StopRAW=0:RawInt:Loop
+ Else
+  SetTick Int,RawInt,3
+ EndIf
+End Sub
+Sub RawInt
+ Local I,T,S:RAWI=RAWI+255:Ra$=Input$(255,#3):I=1000000
+ For T=1 To 255 Step RaWST:S=Peek(Var Ra$,T)/2.55:PWM I,S,S:Next T
+ If Eof(#3) Then Close #3:StopRAW=1:SetTick 0,RawInt,3
+End Sub
+Sub PWMChannel(a,b,c):SelCA=a:SelCB=b:SQLMus=c:End Sub
+Sub IntPWM
+ Local H,M,T,A,B,C
+ If MP>Buf Then RestartVGM
+ If KeyDown=27 Then StopMusic:Exit Sub
+ If SQLMus=1 Then
+  If jmus=SelCA Then jmus=SelCB Else jmus=SelCA
+  a=ton(jmus):If A<=20 Then PWM stop Else B=50-ChVol(jmus)*3:PWM A+20,B,B
+ EndIf
+ Do While (Timer - StartTime <= PauseTime):Rtimer=1:Exit Sub:Loop
+ If Rtimer=1 Then StartTime=Timer:PauseTime=SWait:Rtimer=0
+ MP=MP+1:H=Peek(VAR Mus$,MP)
+ If H=&H50 And AYEn=0 Then
+   MP=MP+1:M$=Bin$(Peek(VAR Mus$,MP))
+   If Left$(M$,1)="1" Then 'LATCH
+    ChAnt=Ch:Ch=Val("&B"+Mid$(M$,2,2))
+    If Mid$(M$,4,1)="0" Then 'TONE
+     Ton(Ch)=Val("&B"+Right$(Bin$(Peek(VAR Mus$,MP+2)),6)+Right$(M$,4))+1
+     MP=MP+2:Ton(Ch)=20+(3579545/(Ton(Ch)*32))
+     If Ton(ch)>19999 Then Ton(ch)=1
+    Else 'VOLUME
+     ChVol(Ch)=Val("&B"+Right$(M$,4)):If ChVol(Ch)=15 Then Ton(Ch)=20
+     If ChVol(3)<14 Then Ton(3)=(255-15*ChVol(3)) Else Ton(3)=1
+    EndIf
+   EndIf
+   If SQLMus=0 Then
+    A=ton(SelCA):B=ton(SelCB):If A=20 And B=20 Then Tone Stop Else Tone A,B
+   EndIf
+ Else
+  WaitRotines(H)
+ EndIf
+End Sub
+
