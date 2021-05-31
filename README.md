@@ -5,8 +5,14 @@ This is a studio that you can create sprites and maps for your Colour Maximite a
 
 The version for the Colour Maximite 2 is in development and soon will be uploaded to this repository.
 
-Expect many bugs as the MStudio for the CMM1 isn't update since 2019 (sorry).
 
+-- THIS PART IS ONLY ABOUT THE CMM1 VERSION --
+
+Rename the mstudio_cmm folder in a PC to MSTUDIO.
+
+The program must be in the B:\MSTUDIO folder.
+
+Expect many bugs as the MStudio for the CMM1 isn't update since 2019 (sorry).
 
 IMPORTANTE NOTICE ABOUT THE CMM1 ADDITIONAL HARDWARE:
 
@@ -15,7 +21,6 @@ IF YOU FRY YOUR COLOUR MAXIMITE OR ANY OTHER THINGS, IT'S YOURS RESPONSABILITY!
 
 RECOMENDATIONS:
 
-* To run this demo you need about 100Kb free in your A: Drive (flash).
 * On clock I recommend about 3.57 MHZ, do not pass 4 Mhz!
 * On the SN76489 datasheet, the data pins are inverted, don't worry and use
   this readme instead
